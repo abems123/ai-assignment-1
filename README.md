@@ -1,11 +1,12 @@
 # Emergency Response System
 
-## Current stage: Bayesian road inference
+## Current stage: Bayesian road inference and uniform-cost routing
 
 These are the initial components, not the completed emergency-response planner.
 The command loads all seven files belonging to the selected scenario, estimates
-the status of every directed road, and prints an input and road-status summary.
-Search, HMM traffic estimation, simulation, allocation, plan validation, and output
+the status of every directed road, and builds a weighted routing graph. An optional
+route query lets you inspect the fastest estimated path between two locations.
+HMM traffic estimation, simulation, allocation, plan validation, and output
 generation will be added after the student chooses their behavior.
 
 The selected model uses inferred road and traffic conditions to calculate travel.
@@ -33,6 +34,16 @@ Each command currently prints a scenario and inferred-road summary. It does not 
 `plan.json` or `statistics.txt`. These will be produced by the same commands once
 the planning components are implemented.
 
+To inspect a route without making a responder assignment:
+
+```bash
+python3 run.py 1 --route N1 N2
+```
+
+This produces the path `N1 -> H1 -> N2` with an estimated travel time of 78.600
+seconds. These costs currently include road status only; HMM traffic adjustments
+are still pending. Travel-time rounding is for display only.
+
 ## Files
 
 - `run.py`: validates the scenario number and starts the program.
@@ -40,13 +51,16 @@ the planning components are implemented.
 - `bayesian.py`: computes road-status probabilities from local weather and noisy
   reports, and selects a status using the approved MAP policy.
 - `travel_times.py`: calculates travel time for a supplied road status using the
-  assignment's Open, Congested, and Blocked rules. It is ready for the routing
-  component; the entry point does not yet call a planner.
+  assignment's Open, Congested, and Blocked rules.
+- `routing.py`: builds the directed weighted graph and finds minimum-time paths
+  using uniform-cost search.
 - `Scenarios/`: the complete supplied inputs, unchanged.
 - `development_notes.md`: development prompt, inspection findings, and choices
   to record as development proceeds.
 - `tests/test_bayesian.py`: checks the inference against hand calculations and
   directed-road evidence.
+- `tests/test_routing.py`: checks weighted search, blocked and congested roads,
+  unreachable destinations, and optimal route costs on all three scenarios.
 
 CSV field values remain strings at this stage. Numeric conversion will happen
 explicitly in the components that use them. JSON numbers retain their supplied
@@ -72,9 +86,27 @@ The independence assumption can overstate confidence if reports copy one another
 MAP routing also discards the remaining uncertainty when selecting a road cost.
 Without ground-truth road states, these results cannot measure estimation accuracy.
 
+## Routing
+
+The student selected uniform-cost search. Each usable directed road receives a
+cost equal to its estimated travel time in seconds. Roads inferred as Blocked are
+excluded. The search uses a priority queue to expand the location with the lowest
+accumulated travel time, keeping a better route whenever one is found. It finishes
+when the goal is removed from that queue at minimum cost. Parent links reconstruct
+the selected path. No heuristic is needed.
+
+The routing function returns a path and travel time. Staying at the same location
+returns a one-node path and zero seconds. An unreachable destination returns an
+empty path and infinite time. Unknown endpoints are rejected.
+
+Equal-cost routes retain the first route discovered; priority-queue ties use
+location identifiers. This is deterministic and does not change the minimum cost.
+The optional route query uses endpoints supplied by the user; it does not select a
+responder or look ahead at future incidents.
+
 ## Verification
 
-Run the six Bayesian checks from this project directory:
+Run the fourteen Bayesian and routing checks from this project directory:
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -82,9 +114,16 @@ python3 -m unittest discover -s tests -v
 
 They cover a hand-calculated multi-report posterior, conditioning on local
 weather, missing-weather marginalization, separate road directions, restrictive
-ties, and impossible evidence. All six passed. All three scenario commands also
-ran successfully, with normalized beliefs for every directed road and unchanged
-input probability tables.
+ties, and impossible evidence. Routing checks cover weighted alternatives,
+improved frontier entries, road congestion and blockage, same-location trips,
+unreachable destinations, and unknown endpoints.
+
+All fourteen checks passed. Route costs were compared against an independent
+Floyd-Warshall reference for all 845 source/destination pairs across the three
+scenarios. Returned paths were checked for contiguous directed roads, exclusion
+of Blocked roads, and agreement between summed road costs and reported travel time.
+All three scenario commands also ran successfully. Their routing graphs contain
+10, 28, and 58 usable directed roads, respectively.
 
 | Scenario | Estimated Open | Estimated Congested | Estimated Blocked |
 | --- | --- | --- | --- |
@@ -125,13 +164,12 @@ statistics will follow after allocation and simulation are implemented.
 
 The following are not implemented or silently chosen:
 
-1. Search algorithm and how HMM traffic beliefs affect routing costs.
-2. HMM inference method, historical-to-current prediction, traffic cost mapping,
+1. HMM inference method, historical-to-current prediction, traffic cost mapping,
    and treatment of roads without traffic observations.
-3. Allocation algorithm, priority policy, and whether late arrivals are allowed.
-4. Simulation clock, responder location after service, replanning/preemption,
+2. Allocation algorithm, priority policy, and whether late arrivals are allowed.
+3. Simulation clock, responder location after service, replanning/preemption,
    and stopping rules.
-5. Statistics definitions and the scope of plan validation.
+4. Statistics definitions and the scope of plan validation.
 
 We will discuss alternatives and record the student's choice before implementing
 each behavior.

@@ -137,4 +137,46 @@ accuracy or plan feasibility.
 In preparation for discussing A* routing, the assistant checked that each supplied
 road distance is at least the straight-line distance between its endpoints. This
 supports a straight-line travel-time lower bound with appropriate speed and delay
-scaling. No search algorithm has been selected or implemented yet.
+scaling. At that point, no search algorithm had been selected or implemented.
+
+### 4. Search algorithm: uniform-cost search (approved)
+
+The assistant offered uniform-cost search and A*. It recommended uniform-cost
+search for the initial version because it is simple and needs no heuristic.
+The student's exact reply was: `1`.
+
+`routing.py` now builds a directed adjacency list using the approved MAP road
+statuses. Open and Congested costs follow the assignment's distance, speed, and
+1.5 congestion factor. Blocked roads are excluded. HMM traffic factors have not
+been chosen or applied yet.
+
+Uniform-cost search expands the lowest accumulated travel-time entry using
+Python's `heapq`. Better paths update the stored time and parent link; superseded
+queue entries are skipped. The search stops when the goal is popped, not when
+first discovered. It then reconstructs the path using parent links. Same-location
+trips cost zero, and unreachable destinations return an empty path and infinite
+time. Equal-cost alternatives keep the first discovered route; queue ties use
+location identifiers for deterministic behavior.
+
+The existing `python3 run.py X` commands still work. An optional `--route START
+GOAL` argument exposes routing for inspection without selecting an incident or
+responder. It reads no future incident information. The entry point still awaits
+HMM, allocation, and simulation choices before producing the required plan and
+performance statistics.
+
+Verification: all fourteen tests passed (six Bayesian tests and eight routing
+tests). The routing tests include weighted alternatives, better paths to frontier
+nodes, blocked and congested roads, zero-length trips, unreachable destinations,
+and invalid endpoints. An independent Floyd-Warshall reference agreed with UCS
+for all 845 location pairs over the three supplied scenarios. Returned paths also
+passed directed-edge, blocked-road, and accumulated-cost checks.
+
+All three scenario commands succeeded, yielding 10, 28, and 58 usable directed
+roads. In Scenario 1, `--route N1 N2` returned N1 -> H1 -> N2 in 78.600 seconds,
+while `--route N2 N1` returned N2 -> N1 in 77.500 seconds. The asymmetry follows
+the different road reports in the two directions. A same-node route returned zero
+seconds, and an unknown endpoint was rejected cleanly.
+
+The verification establishes routing optimality under the current road-cost
+estimates. It does not yet cover traffic-adjusted travel times, dynamic replanning,
+or responder/incident operational constraints; those components are still pending.
