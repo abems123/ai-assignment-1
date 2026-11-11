@@ -180,3 +180,54 @@ seconds, and an unknown endpoint was rejected cleanly.
 The verification establishes routing optimality under the current road-cost
 estimates. It does not yet cover traffic-adjusted travel times, dynamic replanning,
 or responder/incident operational constraints; those components are still pending.
+
+### 5. HMM inference method: forward filtering (approved)
+
+The assistant offered forward filtering, which provides a traffic probability
+distribution after the latest historical observation, and Viterbi, which finds
+the single most likely hidden-state history. It recommended filtering because
+the planner needs traffic beliefs. The student's exact reply was: `1`.
+
+`hmm.py` now groups observations by directed road, sorts each sequence numerically
+by `observation_nr`, and filters it using that scenario's own probability tables.
+The standard HMM initialization uses `initial` as the prior for the first hidden
+state, followed directly by its first emission update. Each later observation
+first gets one transition prediction and then an emission update. Every update
+is normalized. The code uses the supplied matrices; it does not learn new ones
+from the observations. Observation numbers are sequence order, not seconds.
+
+The module returns historical beliefs only for observed roads. It does not fill
+unobserved roads, map history to simulation time zero, advance beliefs during a
+simulation, or convert traffic probabilities to road costs. These planning
+choices remain with the student. The standalone empty-sequence filter returns
+a copy of `initial`, the mathematical prior before any observations; no missing-road
+planning fallback has been adopted by doing so.
+
+`run.py` computes and reports the number of historical road beliefs. The existing
+route query continues to use road-status costs only until the traffic policy is
+selected. Allocation and simulation are still pending.
+
+Verification: seven HMM tests were added, and all twenty-one project tests passed.
+For Scenario 1's model and a first observation Low, the hand-calculated weights
+are 0.51, 0.03, and 0.002. The posterior is Low 255/271, Medium 15/271, High 1/271.
+For observations Low then High, the second posterior is Low 2063/14203,
+Medium 5660/14203, High 6480/14203. An independent reference enumerates all 81
+possible hidden histories for a four-observation sequence and agrees with the
+filter using each scenario's model.
+
+Other checks cover shuffled observations, separate directions, unobserved-road
+omission, empty history, impossible evidence, normalized beliefs, and unchanged
+input tables and rows. All three scenario commands succeeded, producing beliefs
+for 14 of 14, 3 of 30, and 10 of 60 directed roads, respectively. The Scenario 1
+N1-to-N2 route remained 78.600 seconds because traffic-cost integration is pending.
+
+Example historical beliefs, rounded to six decimal places:
+
+| Scenario | Road | Low | Medium | High |
+| --- | --- | --- | --- | --- |
+| 1 | H1 to N1 | 0.871452 | 0.123028 | 0.005520 |
+| 2 | H2 to N8 | 0.010113 | 0.282220 | 0.707666 |
+| 3 | N16 to N17 | 0.001865 | 0.074845 | 0.923290 |
+
+These values concern the end of historical sequences; applying them to current
+or future simulation conditions requires the next modeling decisions.

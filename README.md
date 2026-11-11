@@ -1,18 +1,20 @@
 # Emergency Response System
 
-## Current stage: Bayesian road inference and uniform-cost routing
+## Current stage: Bayesian inference, routing, and historical traffic filtering
 
 These are the initial components, not the completed emergency-response planner.
 The command loads all seven files belonging to the selected scenario, estimates
 the status of every directed road, and builds a weighted routing graph. An optional
 route query lets you inspect the fastest estimated path between two locations.
-HMM traffic estimation, simulation, allocation, plan validation, and output
-generation will be added after the student chooses their behavior.
+The HMM filters historical traffic observations separately for each observed road.
+Traffic timing and cost policies, simulation, allocation, plan validation, and
+output generation will follow the student's choices.
 
 The selected model uses inferred road and traffic conditions to calculate travel.
 Performance results will describe behavior under those estimates. We will not
 sample hidden true road states or simulate failures against a separate ground
-truth. Bayesian report-based inference is implemented; the HMM is still pending.
+truth. Bayesian road inference and HMM historical filtering are implemented.
+How historical traffic beliefs affect simulation and travel costs is still pending.
 
 For road routing, the student selected the most likely road status (MAP): use the
 status with the largest posterior probability, then apply its travel-time rule.
@@ -30,7 +32,8 @@ python3 run.py 2
 python3 run.py 3
 ```
 
-Each command currently prints a scenario and inferred-road summary. It does not yet generate
+Each command prints scenario, inferred-road, and historical-traffic summaries.
+It does not yet generate
 `plan.json` or `statistics.txt`. These will be produced by the same commands once
 the planning components are implemented.
 
@@ -54,6 +57,8 @@ are still pending. Travel-time rounding is for display only.
   assignment's Open, Congested, and Blocked rules.
 - `routing.py`: builds the directed weighted graph and finds minimum-time paths
   using uniform-cost search.
+- `hmm.py`: filters each directed road's ordered historical traffic sequence using
+  that scenario's initial, transition, and emission probabilities.
 - `Scenarios/`: the complete supplied inputs, unchanged.
 - `development_notes.md`: development prompt, inspection findings, and choices
   to record as development proceeds.
@@ -61,6 +66,8 @@ are still pending. Travel-time rounding is for display only.
   directed-road evidence.
 - `tests/test_routing.py`: checks weighted search, blocked and congested roads,
   unreachable destinations, and optimal route costs on all three scenarios.
+- `tests/test_hmm.py`: checks filtering against hand calculations and independent
+  enumeration of hidden histories, plus sequence grouping and scenario models.
 
 CSV field values remain strings at this stage. Numeric conversion will happen
 explicitly in the components that use them. JSON numbers retain their supplied
@@ -104,9 +111,43 @@ location identifiers. This is deterministic and does not change the minimum cost
 The optional route query uses endpoints supplied by the user; it does not select a
 responder or look ahead at future incidents.
 
+## Historical traffic filtering
+
+The student selected forward filtering. Traffic levels are Low, Medium, and High;
+they are distinct from the Open, Congested, and Blocked road statuses.
+
+For each observed directed road, sort its observations by numeric `observation_nr`.
+Use the supplied `initial` distribution as the prior for the first hidden state.
+Multiply by the first observation's emission probabilities and normalize. Before
+each following observation, predict the next distribution using the transition
+matrix, then multiply by that observation's emission probabilities and normalize.
+Transition rows are previous states and columns are next states. Emission rows
+are hidden states and columns are observations.
+
+The result is a distribution after the last historical observation. No new
+transition or emission probabilities are trained from the CSV. The ordinal
+observation numbers are not interpreted as seconds or simulation timestamps.
+The filter uses each scenario's own probability file; Scenario 2's model differs.
+
+Only roads with observations receive a historical belief. The pure filtering
+function returns the supplied prior for an empty sequence, but the per-road
+inference function leaves unobserved roads absent. Their planning fallback has
+not been selected. Timing relative to simulation time zero, subsequent evolution,
+and conversion to routing costs are also still undecided. Route inspection
+therefore continues to use road-status costs only.
+
+Examples below are beliefs after each road's last historical observation,
+rounded to six decimal places. Internal computations retain full precision.
+
+| Scenario | Directed road | Low | Medium | High |
+| --- | --- | --- | --- | --- |
+| 1 | H1 to N1 | 0.871452 | 0.123028 | 0.005520 |
+| 2 | H2 to N8 | 0.010113 | 0.282220 | 0.707666 |
+| 3 | N16 to N17 | 0.001865 | 0.074845 | 0.923290 |
+
 ## Verification
 
-Run the fourteen Bayesian and routing checks from this project directory:
+Run the twenty-one Bayesian, routing, and HMM checks from this project directory:
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -118,12 +159,18 @@ ties, and impossible evidence. Routing checks cover weighted alternatives,
 improved frontier entries, road congestion and blockage, same-location trips,
 unreachable destinations, and unknown endpoints.
 
-All fourteen checks passed. Route costs were compared against an independent
+All twenty-one checks passed. Route costs were compared against an independent
 Floyd-Warshall reference for all 845 source/destination pairs across the three
 scenarios. Returned paths were checked for contiguous directed roads, exclusion
 of Blocked roads, and agreement between summed road costs and reported travel time.
 All three scenario commands also ran successfully. Their routing graphs contain
 10, 28, and 58 usable directed roads, respectively.
+
+The seven HMM checks cover the first observation, a two-observation hand
+calculation, comparison with exhaustive hidden-history enumeration, sequence
+ordering and direction, each scenario's own model, empty history, and impossible
+evidence. Filtering produced normalized historical beliefs for 14, 3, and 10
+directed roads in the three scenarios, without changing input tables or rows.
 
 | Scenario | Estimated Open | Estimated Congested | Estimated Blocked |
 | --- | --- | --- | --- |
@@ -164,7 +211,7 @@ statistics will follow after allocation and simulation are implemented.
 
 The following are not implemented or silently chosen:
 
-1. HMM inference method, historical-to-current prediction, traffic cost mapping,
+1. Historical-to-current traffic prediction, subsequent evolution, cost mapping,
    and treatment of roads without traffic observations.
 2. Allocation algorithm, priority policy, and whether late arrivals are allowed.
 3. Simulation clock, responder location after service, replanning/preemption,
