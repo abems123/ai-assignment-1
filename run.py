@@ -5,9 +5,10 @@ from collections import Counter
 from pathlib import Path
 
 from bayesian import ROAD_STATUSES, infer_road_beliefs, most_likely_road_status
-from hmm import infer_historical_traffic
+from hmm import infer_historical_traffic, initialize_traffic_beliefs
 from routing import build_routing_graph, uniform_cost_search
 from scenario_loader import load_scenario
+from travel_times import TRAFFIC_MULTIPLIERS
 
 
 def main():
@@ -27,20 +28,34 @@ def main():
     )
     try:
         scenario = load_scenario(scenario_directory)
+
+        # 1. Bayesian inference:
         road_beliefs = infer_road_beliefs(
             scenario.city_graph, scenario.road_reports, scenario.road_probabilities
         )
+
+        # 2. Select MAP road statuses:
         road_statuses = {
             road: most_likely_road_status(probabilities)
             for road, probabilities in road_beliefs.items()
         }
+
+        # 3. HMM historical forward filtering:
         historical_traffic_beliefs = infer_historical_traffic(
             scenario.city_graph, scenario.traffic_observations,
             scenario.traffic_probabilities,
         )
-        routing_graph = build_routing_graph(scenario.city_graph, road_statuses)
+
+        # 4. Initialize traffic beliefs for every road:
+        traffic_beliefs = initialize_traffic_beliefs(
+            scenario.city_graph, historical_traffic_beliefs, scenario.traffic_probabilities
+        )
+
+        # 5. Build a graph with both kinds of estimates:
+        routing_graph = build_routing_graph(scenario.city_graph, road_statuses, traffic_beliefs)
         route = None
         if args.route:
+            # 6. Find a route using UCS:
             route = uniform_cost_search(routing_graph, args.route[0], args.route[1])
     except (OSError, ValueError, KeyError) as error:
         parser.exit(1, f"Could not process scenario {args.scenario}: {error}\n")
@@ -50,6 +65,8 @@ def main():
     print("Selected road-status policy: most likely status (MAP).")
     print("Selected routing algorithm: uniform-cost search.")
     print("Selected historical traffic method: forward filtering.")
+    print("Traffic policy: fixed beliefs and probability-weighted travel multipliers.")
+    print(f"Traffic multipliers: {TRAFFIC_MULTIPLIERS}")
     print(f"Locations: {len(scenario.city_graph['nodes'])}")
     print(f"Directed roads: {len(scenario.city_graph['roads'])}")
     print(f"Responders: {len(scenario.responders)}")
@@ -60,6 +77,8 @@ def main():
         f"Historical traffic beliefs computed for {len(historical_traffic_beliefs)} "
         f"of {len(scenario.city_graph['roads'])} directed roads."
     )
+    fallback_count = len(traffic_beliefs) - len(historical_traffic_beliefs)
+    print(f"Initial-distribution fallback used for {fallback_count} directed roads.")
     counts = Counter(road_statuses.values())
     print("Estimated road statuses: " + ", ".join(
         f"{status}={counts[status]}" for status in ROAD_STATUSES
@@ -71,13 +90,13 @@ def main():
         path, travel_time = route
         if path:
             print("Route: " + " -> ".join(path))
-            print(f"Estimated travel time (road status only): {travel_time:.3f} s")
+            print(f"Estimated travel time (road status and traffic): {travel_time:.3f} s")
         else:
             print(f"No usable route from {args.route[0]} to {args.route[1]}.")
     print(
-        "Bayesian inference, routing, and historical traffic filtering are ready. "
-        "Traffic timing/cost policies, allocation, and simulation will follow your "
-        "design choices before generating plan.json and statistics.txt."
+        "Bayesian inference, HMM traffic estimation, and routing are ready. "
+        "Allocation and simulation will follow your design choices before "
+        "generating plan.json and statistics.txt."
     )
 
 

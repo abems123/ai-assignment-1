@@ -3,14 +3,14 @@
 from heapq import heappop, heappush
 from math import inf
 
-from travel_times import road_travel_time_seconds
+from travel_times import estimated_travel_time_seconds
 
 
-def build_routing_graph(city_graph: dict, road_statuses: dict) -> dict:
+def build_routing_graph(city_graph: dict, road_statuses: dict, traffic_beliefs: dict) -> dict:
     """Build an adjacency list, excluding roads inferred as Blocked.
 
-    Each entry is (next_location, travel_seconds). Costs currently include road
-    status only; HMM traffic adjustments will be added after their policy is chosen.
+    Each entry is (next_location, travel_seconds). Costs combine the inferred road
+    status and the expected traffic multiplier. The graph is fixed for this run.
     """
     graph = {}
     for node in city_graph["nodes"]:
@@ -22,7 +22,7 @@ def build_routing_graph(city_graph: dict, road_statuses: dict) -> dict:
         if start not in graph or goal not in graph:
             raise ValueError(f"Road has an unknown endpoint: {start} to {goal}")
         status = road_statuses[(start, goal)]
-        cost = road_travel_time_seconds(road, status)
+        cost = estimated_travel_time_seconds(road, status, traffic_beliefs[(start, goal)])
         if cost != inf:
             graph[start].append((goal, cost))
     return graph

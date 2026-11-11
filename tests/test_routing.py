@@ -5,6 +5,7 @@ from pathlib import Path
 import unittest
 
 from bayesian import infer_road_beliefs, most_likely_road_status
+from hmm import infer_historical_traffic, initialize_traffic_beliefs
 from routing import build_routing_graph, uniform_cost_search
 from scenario_loader import load_scenario
 
@@ -57,7 +58,8 @@ class RoutingTests(unittest.TestCase):
             ],
         }
         statuses = {("A", "B"): "Blocked", ("A", "C"): "Open", ("C", "B"): "Open"}
-        graph = build_routing_graph(city, statuses)
+        traffic = {road: {"Low": 1.0, "Medium": 0.0, "High": 0.0} for road in statuses}
+        graph = build_routing_graph(city, statuses, traffic)
         self.assertEqual(uniform_cost_search(graph, "A", "B"), (["A", "C", "B"], 20))
         self.assertEqual(graph["A"], [("C", 10)])
 
@@ -71,7 +73,8 @@ class RoutingTests(unittest.TestCase):
             ],
         }
         statuses = {("A", "B"): "Congested", ("A", "C"): "Open", ("C", "B"): "Open"}
-        graph = build_routing_graph(city, statuses)
+        traffic = {road: {"Low": 1.0, "Medium": 0.0, "High": 0.0} for road in statuses}
+        graph = build_routing_graph(city, statuses, traffic)
         self.assertEqual(uniform_cost_search(graph, "A", "B"), (["A", "C", "B"], 12))
 
     def test_same_location_has_zero_travel_time(self):
@@ -95,7 +98,14 @@ class RoutingTests(unittest.TestCase):
             statuses = {}
             for road, probabilities in beliefs.items():
                 statuses[road] = most_likely_road_status(probabilities)
-            graph = build_routing_graph(scenario.city_graph, statuses)
+            historical = infer_historical_traffic(
+                scenario.city_graph, scenario.traffic_observations,
+                scenario.traffic_probabilities,
+            )
+            traffic = initialize_traffic_beliefs(
+                scenario.city_graph, historical, scenario.traffic_probabilities
+            )
+            graph = build_routing_graph(scenario.city_graph, statuses, traffic)
             reference = reference_distances(graph)
             for endpoints, expected_time in reference.items():
                 start, goal = endpoints

@@ -231,3 +231,54 @@ Example historical beliefs, rounded to six decimal places:
 
 These values concern the end of historical sequences; applying them to current
 or future simulation conditions requires the next modeling decisions.
+
+### 6. Traffic timing, multipliers, and missing-road fallback (approved)
+
+The assistant proposed treating each final historical belief as the estimate at
+simulation time zero and keeping it fixed, using expected multipliers Low 1.0,
+Medium 1.25, High 1.5 multiplied by road-status time, and using the supplied
+initial distribution for roads without observations. Alternatives were evolving
+beliefs with a chosen time-step mapping, most-likely-level or different traffic
+factors, and a stationary fallback distribution. The student's exact reply,
+including Markdown, was: `**Use all three recommendations**`.
+
+All three recommendations are implemented. `initialize_traffic_beliefs` copies
+each observed road's final posterior with no extra prediction and copies the
+scenario's initial distribution for every unobserved road. The routing graph is
+built once from these beliefs; the selected policy will reuse them as simulation
+time advances. No seconds-per-HMM-step parameter or stationary calculation is used.
+
+`expected_traffic_multiplier` uses the full three-state distribution. For example,
+Low 0.6, Medium 0.3, High 0.1 yields a multiplier of 1.125. The resulting travel
+time multiplies the road-status time by this traffic factor. Congested plus
+certain High traffic gives 2.25 times normal time. Blocked roads stay unusable.
+The graph builder requires traffic beliefs explicitly, so production routing
+cannot accidentally omit the approved traffic policy.
+
+The existing entry point now integrates Bayesian road inference, historical HMM
+filtering, complete traffic initialization, and traffic-adjusted UCS. Responder
+allocation and simulation are still pending the student's decisions, so the
+required plan and performance files are not generated at this stage.
+
+Verification: all twenty-seven tests passed. Six new checks cover the probability
+weighted factor, multiplicative delays, inability of Low traffic to reopen a
+Blocked road, historical initialization without prediction or aliasing, the
+scenario-specific initial fallback, and a route change caused by traffic. The
+independent all-pairs reference now checks traffic-adjusted graph costs and
+still agrees with UCS for all 845 pairs across the supplied scenarios.
+
+All three normal scenario commands succeeded. Fallback counts are 0, 27, and 50
+directed roads in scenarios 1, 2, and 3. Scenario 2's fallback factor is 1.1625.
+Scenario 1 route inspection returns N1 -> H1 -> N2 in 79.399 seconds and N2 -> N1
+in 78.973 seconds; the same-node route remains zero. Calculations retain full
+precision, with three decimal places used only for CLI display.
+
+Limitations: fixed beliefs do not respond to later traffic changes; the selected
+traffic factors are assumptions rather than calibrated measurements. Multiplying
+road and traffic factors can count congestion twice if they describe the same
+cause. The report should distinguish these model-based times from true outcomes.
+
+The pending-decisions list was also clarified: the assignment defines the deadline
+as the latest time a responder must arrive, so allocation must respect arrival
+deadlines. Allocation objectives, simulation policies, and the handling of
+unassigned incidents in statistics still need student choices.

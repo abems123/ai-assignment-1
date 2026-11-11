@@ -20,8 +20,8 @@ def forward_filter(observations: list[str], tables: dict) -> dict[str, float]:
 
     The supplied initial distribution is the prior for the first hidden state.
     Apply its first emission directly; transition before each later observation.
-    An empty sequence returns a copy of that prior. Applying it to unobserved
-    roads or simulation time zero is a separate, still-pending planning decision.
+    An empty sequence returns a copy of that prior. The planning initialization
+    function separately maps historical beliefs and priors to simulation time zero.
     """
     belief = dict(tables["initial"])
     for index, observation in enumerate(observations):
@@ -78,4 +78,22 @@ def infer_historical_traffic(city_graph: dict, observations: list[dict], tables:
             ordered_observations.append(level)
             previous_number = number
         beliefs[road] = forward_filter(ordered_observations, tables)
+    return beliefs
+
+
+def initialize_traffic_beliefs(city_graph: dict, historical_beliefs: dict, tables: dict) -> dict:
+    """Initialize the approved fixed traffic model for all directed roads.
+
+    Use the final filtered belief directly at simulation time zero. Roads without
+    history use the supplied initial distribution. No additional HMM prediction
+    is performed. The selected simulation policy reuses these beliefs unchanged.
+    """
+    beliefs = {}
+    for road in city_graph["roads"]:
+        key = (road["from"], road["to"])
+        if key in historical_beliefs:
+            belief = historical_beliefs[key]
+        else:
+            belief = tables["initial"]
+        beliefs[key] = dict(belief)
     return beliefs
