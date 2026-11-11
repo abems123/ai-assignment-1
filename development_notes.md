@@ -282,3 +282,61 @@ The pending-decisions list was also clarified: the assignment defines the deadli
 as the latest time a responder must arrive, so allocation must respect arrival
 deadlines. Allocation objectives, simulation policies, and the handling of
 unassigned incidents in statistics still need student choices.
+
+### 7. CSP method and allocation objective (approved)
+
+The assistant proposed plain CSP backtracking, with forward checking as a more
+complex alternative. It recommended maximizing the numbers of Critical, High,
+Medium, and Low assignments in that order, then minimizing total response time.
+The alternative objective counted total assignments first. The student's exact
+reply, including Markdown, was: `**Use both recommendations**`.
+
+`allocation.py` implements the selected immediate-batch optimizer. Each known
+pending incident is a variable whose domain consists of feasible available
+responders and an unassigned option. Capability, availability, route existence,
+and arrival deadlines filter each domain. During backtracking, a responder-ID
+set prevents assigning one responder twice. All complete combinations are scored
+by (Critical, High, Medium, Low, negative total response time). No forward checking
+or future-incident lookahead is used. Equal scores keep input-order choices.
+
+Response time means arrival minus incident timestamp, including waiting before
+dispatch. Assignment records also contain start and completion times; completion
+is arrival plus required handling time. Arrival at the deadline is permitted,
+and handling may finish later. Input records and responder snapshots are not
+mutated by the optimizer. Applying assignments and updating occupancy is left
+to the simulator once its behavior is chosen.
+
+The entry point now previews allocations at t=0. The initial results are:
+
+| Scenario | Preview dispatches |
+| --- | --- |
+| 1 | R1 to I2; R2 to I4; R3 to I3 |
+| 2 | R10 to I3 |
+| 3 | R3 to I1; R9 to I2 |
+
+All three scenario commands succeeded. In Scenario 1, arrivals were 79.399 s
+for I2, 113.257 s for I3, and 48.555 s for I4. Their handling finishes at
+109.399 s, 133.257 s, and 58.555 s, respectively. These are initial previews;
+the program has not yet simulated subsequent incident arrivals or unit releases.
+
+Eleven new allocation tests passed, bringing the project total to thirty-eight.
+The scarce-capability test requires undoing an initial choice to serve two
+Critical incidents with the correct responder combination. Other checks cover
+priority dominance, response-time tie breaking, future-incident exclusion, busy
+units, exact release and arrival times, completion after an arrival deadline,
+incompatible or unreachable incidents, one assignment per unit, deterministic
+state-preserving behavior, and initial CSV parsing. Initial batches in all three
+scenarios passed independent capability, availability, directed-path, accumulated
+cost, arrival-deadline, and completion-time checks. Route inspection still worked.
+
+Limitations: this optimization considers one immediate dispatch batch. It does
+not optimize sequences of jobs, reserve responders for future incidents, or
+guarantee globally optimal priority totals across a complete run. Plain exhaustive
+backtracking may also become expensive on substantially larger dispatch batches.
+The earlier one-Critical-versus-several-lower-priority illustration described a
+scheduling intuition; the current one-to-one batch model does not compare such
+multi-job schedules. The report should distinguish batch optimality from global
+simulation performance.
+
+Simulation events, responder positions after service or initial busy periods,
+preemption, stopping behavior, and statistics definitions remain undecided.

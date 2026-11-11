@@ -1,6 +1,6 @@
 # Emergency Response System
 
-## Current stage: Bayesian inference, HMM traffic, and traffic-adjusted routing
+## Current stage: all four AI components, with an initial dispatch preview
 
 These are the initial components, not the completed emergency-response planner.
 The command loads all seven files belonging to the selected scenario, estimates
@@ -8,8 +8,9 @@ the status of every directed road, and builds a weighted routing graph. An optio
 route query lets you inspect the fastest estimated path between two locations.
 The HMM filters historical traffic observations separately for each observed road.
 The approved traffic policy initializes a fixed belief for every road and uses
-its probability-weighted delay in routing. Simulation, allocation, plan validation,
-and output generation will follow the student's choices.
+its probability-weighted delay in routing. A plain backtracking CSP selects an
+initial dispatch batch using the approved priority objective. Simulation, complete
+plan validation, and output generation will follow the student's choices.
 
 The selected model uses inferred road and traffic conditions to calculate travel.
 Performance results will describe behavior under those estimates. We will not
@@ -35,7 +36,8 @@ python3 run.py 2
 python3 run.py 3
 ```
 
-Each command prints scenario, inferred-road, and historical-traffic summaries.
+Each command prints scenario, inferred-road, and historical-traffic summaries,
+plus a dispatch preview at simulation time zero.
 It does not yet generate
 `plan.json` or `statistics.txt`. These will be produced by the same commands once
 the planning components are implemented.
@@ -63,6 +65,8 @@ display only.
 - `hmm.py`: filters each directed road's ordered historical traffic sequence using
   that scenario's initial, transition, and emission probabilities, then initializes
   the fixed traffic model for all roads.
+- `allocation.py`: initializes responder snapshots, builds feasible assignment
+  domains, and selects a priority-first dispatch batch using CSP backtracking.
 - `Scenarios/`: the complete supplied inputs, unchanged.
 - `development_notes.md`: development prompt, inspection findings, and choices
   to record as development proceeds.
@@ -74,6 +78,8 @@ display only.
   enumeration of hidden histories, plus sequence grouping and scenario models.
 - `tests/test_traffic_costs.py`: checks fixed-belief initialization, missing-road
   priors, traffic multipliers, combined delays, and traffic-driven route changes.
+- `tests/test_allocation.py`: checks operational constraints, joint allocation,
+  priorities, response time, future-incident exclusion, and input preservation.
 
 CSV field values remain strings at this stage. Numeric conversion will happen
 explicitly in the components that use them. JSON numbers retain their supplied
@@ -146,7 +152,7 @@ HMM prediction is made between the end of history and simulation time zero.
 The selected model keeps these initialized beliefs fixed for the simulation.
 It does not assign a duration in seconds to historical HMM steps or advance
 traffic beliefs as simulation time passes. The routing graph is built once from
-these fixed beliefs. Allocation and the simulation clock are still pending.
+these fixed beliefs. The full simulation clock is still pending.
 
 Examples below are beliefs after each road's last historical observation,
 rounded to six decimal places. Internal computations retain full precision.
@@ -188,9 +194,56 @@ measurements. Fixed beliefs ignore later traffic changes. Multiplying road and
 traffic delays can count congestion twice if both estimates describe the same
 underlying delay; this is a limitation of the selected initial model.
 
+## Constraint-based allocation
+
+The student selected plain CSP backtracking with a priority-first objective.
+
+- Variables: incidents that are already known and still pending.
+- Domains: currently feasible responder assignments, plus leaving an incident
+  unassigned for now.
+- Constraints: the listed capability must match, the responder must be available,
+  the route must exist, arrival must be at or before the absolute deadline, and
+  no responder may receive two assignments in one dispatch batch.
+
+The search tries each compatible choice and undoes it before trying another.
+Domains are built once using the unary constraints. A set of used responder IDs
+checks the shared-responder constraint during search. There is no forward checking
+or lookahead at unrevealed incidents.
+
+Complete combinations are compared by the tuple:
+
+```text
+(Critical count, High count, Medium count, Low count, -total response time)
+```
+
+The comparison proceeds left to right. Response time is arrival time minus the
+incident's timestamp, including any waiting before dispatch. Equal scores retain
+the first combination in input order. The result is optimal for the current
+immediate batch under these criteria, not for a sequence of future dispatches.
+
+The allocator leaves input state unchanged. Assignment records include start,
+arrival, completion, and response times. Completion is arrival plus the required
+handling duration; it can be later than the arrival deadline. The eventual
+simulator will apply the chosen assignments, track occupancy, and pass only
+unhandled pending incidents to subsequent allocation calls.
+
+Initially Busy responders become eligible at their supplied availability time.
+Their position after that existing activity, movement after new assignments,
+preemption, and scheduling events are still simulation decisions. The current
+entry point previews only the first batch at time zero:
+
+| Scenario | Initial assignments |
+| --- | --- |
+| 1 | R1 to I2; R2 to I4; R3 to I3 |
+| 2 | R10 to I3 |
+| 3 | R3 to I1; R9 to I2 |
+
+These are dispatch previews rather than completed-scenario statistics. Pending
+incidents can be reconsidered later once the simulation policy is implemented.
+
 ## Verification
 
-Run the twenty-seven Bayesian, routing, HMM, and traffic-cost checks from this project directory:
+Run the thirty-eight project checks from this project directory:
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -202,7 +255,7 @@ ties, and impossible evidence. Routing checks cover weighted alternatives,
 improved frontier entries, road congestion and blockage, same-location trips,
 unreachable destinations, and unknown endpoints.
 
-All twenty-seven checks passed. Traffic-adjusted route costs were compared against an independent
+All thirty-eight checks passed. Traffic-adjusted route costs were compared against an independent
 Floyd-Warshall reference for all 845 source/destination pairs across the three
 scenarios. Returned paths were checked for contiguous directed roads, exclusion
 of Blocked roads, and agreement between summed road costs and reported travel time.
@@ -222,6 +275,13 @@ traffic changes the fastest route. All three scenario commands also run with the
 integrated traffic model. Scenario 1 route queries return 79.399 seconds for
 N1 to N2, 78.973 seconds for N2 to N1, and zero for N1 to N1.
 
+Eleven allocation checks cover a scarce-capability case requiring backtracking,
+the priority hierarchy, response-time ties, exclusion of future incidents, exact
+availability and arrival deadlines, handling after arrival, unreachable routes,
+capability mismatches, responder uniqueness, deterministic state-preserving search,
+and initialization from the supplied CSV fields. Initial allocations on all three
+scenarios also passed independent route, time, capability, and availability checks.
+
 | Scenario | Estimated Open | Estimated Congested | Estimated Blocked |
 | --- | --- | --- | --- |
 | 1 | 8 | 2 | 4 |
@@ -229,7 +289,7 @@ N1 to N2, 78.973 seconds for N2 to N1, and zero for N1 to N1.
 | 3 | 47 | 11 | 2 |
 
 These counts concern inferred directed-road statuses. Incident performance
-statistics will follow after allocation and simulation are implemented.
+statistics will follow after simulation is implemented.
 
 ## Requirements already specified by the sources
 
@@ -261,10 +321,9 @@ statistics will follow after allocation and simulation are implemented.
 
 The following are not implemented or silently chosen:
 
-1. Allocation algorithm and priority policy, respecting the required arrival deadlines.
-2. Simulation clock, responder location after service, replanning/preemption,
+1. Simulation clock, responder location after service, replanning/preemption,
    and stopping rules.
-3. Statistics definitions and the scope of plan validation.
+2. Statistics definitions and the scope of complete-plan validation.
 
 We will discuss alternatives and record the student's choice before implementing
 each behavior.
