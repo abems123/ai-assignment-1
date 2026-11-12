@@ -1,0 +1,11 @@
+System statistics:
+Incidents handled: 6 of 7
+Incidents unhandled: 1
+Responders used: 4
+Average response time: 90.256 s
+Deadlines met: 85.714% (6/7)
+Unhandled incident IDs: I7
+
+Time unit: seconds. Response time includes waiting before dispatch and travel.
+The average includes handled incidents only. Unhandled incidents count as deadline misses.
+Travel times use the selected fixed road and traffic estimates.

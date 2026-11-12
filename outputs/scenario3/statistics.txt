@@ -1,0 +1,11 @@
+System statistics:
+Incidents handled: 12 of 20
+Incidents unhandled: 8
+Responders used: 7
+Average response time: 654.405 s
+Deadlines met: 60.000% (12/20)
+Unhandled incident IDs: I3, I4, I5, I6, I11, I14, I15, I17
+
+Time unit: seconds. Response time includes waiting before dispatch and travel.
+The average includes handled incidents only. Unhandled incidents count as deadline misses.
+Travel times use the selected fixed road and traffic estimates.
