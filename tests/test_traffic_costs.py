@@ -20,10 +20,20 @@ class TrafficCostTests(unittest.TestCase):
         road = {"distance": 300, "speed": 15}
         self.assertAlmostEqual(estimated_travel_time_seconds(road, "Open", belief), 22.5)
 
-    def test_road_congestion_and_high_traffic_multiply(self):
+    def test_congestion_and_traffic_use_larger_delay_without_multiplying(self):
         road = {"distance": 300, "speed": 15}
-        high = {"Low": 0.0, "Medium": 0.0, "High": 1.0}
-        self.assertEqual(estimated_travel_time_seconds(road, "Congested", high), 45.0)
+        beliefs = {
+            "low": {"Low": 1.0, "Medium": 0.0, "High": 0.0},
+            "mixed": {"Low": 0.6, "Medium": 0.3, "High": 0.1},
+            "high": {"Low": 0.0, "Medium": 0.0, "High": 1.0},
+        }
+        # Road congestion takes 30 s; the traffic estimates are 20, 22.5 and 30 s.
+        # Their maximum stays 30 s, without stacking the two congestion effects.
+        for name, belief in beliefs.items():
+            with self.subTest(traffic=name):
+                self.assertEqual(
+                    estimated_travel_time_seconds(road, "Congested", belief), 30.0
+                )
 
     def test_low_traffic_cannot_reopen_a_blocked_road(self):
         road = {"distance": 300, "speed": 15}

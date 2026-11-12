@@ -174,7 +174,7 @@ python3 -m unittest discover -s tests -v
 
 The test suite covers Bayesian inference, HMM filtering, traffic costs, routing, CSP allocation, event-driven simulation, plan validation, reporting, and command-line execution. The plan validator checks valid road directions and endpoints, responder capabilities and availability, incident visibility, arrival deadlines, repeated assignments, and overlapping responder work.
 
-**Current test-suite issue (verified against this upload):** 61 tests run, **60 pass and 1 fails**. `tests/test_traffic_costs.py::test_road_congestion_and_high_traffic_multiply` still expects the **previous multiplicative** travel-time policy (`45.0 s`), while the current `max` policy correctly returns `30.0 s` for that test case. The test expectation needs to be updated to match the adopted policy; this README does not modify the test code. All three scenario runs complete and their generated plans pass validation.
+**Verified result: all 61 tests pass.** The traffic-cost regression test has been renamed to `test_congestion_and_traffic_use_larger_delay_without_multiplying` and updated for the adopted `max` policy. A road with a normal travel time of `20.0 s` and a `Congested` status must take `30.0 s` with low, mixed or high traffic beliefs; its road-status and traffic delays are not multiplied. The former `45.0 s` expectation applied to the previous policy. Existing tests also check that open roads use the full traffic probability distribution and that blocked roads remain unusable. All three scenario runs complete and their generated plans pass validation.
 
 ## Results on supplied scenarios
 
