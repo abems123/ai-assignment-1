@@ -48,4 +48,11 @@ def estimated_travel_time_seconds(road: dict, status: str, traffic_belief: dict)
     A blocked road remains unusable regardless of its traffic belief.
     """
     road_time = road_travel_time_seconds(road, status)
-    return road_time * expected_traffic_multiplier(traffic_belief)
+
+    if road_time == inf:
+        return inf
+
+    base_time = road_travel_time_seconds(road, "Open")
+    traffic_time = base_time * expected_traffic_multiplier(traffic_belief)
+
+    return max(road_time, traffic_time)

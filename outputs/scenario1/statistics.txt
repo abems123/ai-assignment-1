@@ -2,7 +2,7 @@ System statistics:
 Incidents handled: 6 of 7
 Incidents unhandled: 1
 Responders used: 4
-Average response time: 90.256 s
+Average response time: 89.765 s
 Deadlines met: 85.714% (6/7)
 Unhandled incident IDs: I7
 

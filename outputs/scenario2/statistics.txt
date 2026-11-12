@@ -1,10 +1,10 @@
 System statistics:
-Incidents handled: 3 of 12
-Incidents unhandled: 9
-Responders used: 2
-Average response time: 15.419 s
-Deadlines met: 25.000% (3/12)
-Unhandled incident IDs: I1, I2, I4, I5, I6, I7, I9, I10, I12
+Incidents handled: 9 of 12
+Incidents unhandled: 3
+Responders used: 7
+Average response time: 36.982 s
+Deadlines met: 75.000% (9/12)
+Unhandled incident IDs: I2, I4, I9
 
 Time unit: seconds. Response time includes waiting before dispatch and travel.
 The average includes handled incidents only. Unhandled incidents count as deadline misses.
