@@ -1,34 +1,14 @@
 # Emergency Response System
 
-## Current stage: all four AI components, with an initial dispatch preview
+A working initial implementation of the emergency-response assignment using
+Bayesian road inference, HMM forward filtering, uniform-cost routing, and a
+priority-first backtracking CSP. It runs an event-driven simulation, validates
+the exported plan, and writes the required plan and statistics files.
 
-These are the initial components, not the completed emergency-response planner.
-The command loads all seven files belonging to the selected scenario, estimates
-the status of every directed road, and builds a weighted routing graph. An optional
-route query lets you inspect the fastest estimated path between two locations.
-The HMM filters historical traffic observations separately for each observed road.
-The approved traffic policy initializes a fixed belief for every road and uses
-its probability-weighted delay in routing. A plain backtracking CSP selects an
-initial dispatch batch using the approved priority objective. Simulation, complete
-plan validation, and output generation will follow the student's choices.
+## Run
 
-The selected model uses inferred road and traffic conditions to calculate travel.
-Performance results will describe behavior under those estimates. We will not
-sample hidden true road states or simulate failures against a separate ground
-truth. Bayesian road inference, HMM filtering, and their combined routing costs
-are implemented. Historical beliefs are treated as the estimates at simulation
-time zero and remain fixed under the selected policy. Roads without observations
-use that scenario's supplied `initial` distribution.
-
-For road routing, the student selected the most likely road status (MAP): use the
-status with the largest posterior probability, then apply its travel-time rule.
-This discards the other probabilities when assigning the road's routing cost.
-Exact ties choose the most restrictive tied status: Blocked, then Congested,
-then Open.
-
-Use Python 3.9 or newer. There are no external dependencies.
-
-Extract the project, open a terminal in this directory, and run:
+Use Python 3.9 or newer. Everything uses the Python standard library; no packages
+need to be installed. Extract the project, open its root folder, and run:
 
 ```bash
 python3 run.py 1
@@ -36,294 +16,215 @@ python3 run.py 2
 python3 run.py 3
 ```
 
-Each command prints scenario, inferred-road, and historical-traffic summaries,
-plus a dispatch preview at simulation time zero.
-It does not yet generate
-`plan.json` or `statistics.txt`. These will be produced by the same commands once
-the planning components are implemented.
+Each command creates or updates `plan.json` and `statistics.txt` in its own
+`outputs/scenario1/`, `outputs/scenario2/`, or `outputs/scenario3/` folder.
+Outputs are organized by scenario so running another scenario does not erase the
+previous result. Input and output paths are relative to the project, independent
+of the terminal's working directory.
 
-To inspect a route without making a responder assignment:
+For a diagnostic route query instead of a full simulation:
 
 ```bash
 python3 run.py 1 --route N1 N2
 ```
 
-This produces the path `N1 -> H1 -> N2` with an estimated travel time of 79.399
-seconds, including road-status and traffic delays. Travel-time rounding is for
-display only.
+This prints `N1 -> H1 -> N2`, with an estimated travel time of 79.399 seconds.
+Route-query mode does not generate the simulation output files.
 
-## Files
+## Folder organization
 
-- `run.py`: validates the scenario number and starts the program.
-- `scenario_loader.py`: reads the JSON and CSV files into a `Scenario` object.
-- `bayesian.py`: computes road-status probabilities from local weather and noisy
-  reports, and selects a status using the approved MAP policy.
-- `travel_times.py`: calculates travel time for a supplied road status using the
-  assignment's road-status rules and the selected expected traffic multiplier.
-- `routing.py`: builds the directed weighted graph and finds minimum-time paths
-  using uniform-cost search.
-- `hmm.py`: filters each directed road's ordered historical traffic sequence using
-  that scenario's initial, transition, and emission probabilities, then initializes
-  the fixed traffic model for all roads.
-- `allocation.py`: initializes responder snapshots, builds feasible assignment
-  domains, and selects a priority-first dispatch batch using CSP backtracking.
-- `Scenarios/`: the complete supplied inputs, unchanged.
-- `development_notes.md`: development prompt, inspection findings, and choices
-  to record as development proceeds.
-- `tests/test_bayesian.py`: checks the inference against hand calculations and
-  directed-road evidence.
-- `tests/test_routing.py`: checks weighted search, blocked and congested roads,
-  unreachable destinations, and optimal route costs on all three scenarios.
-- `tests/test_hmm.py`: checks filtering against hand calculations and independent
-  enumeration of hidden histories, plus sequence grouping and scenario models.
-- `tests/test_traffic_costs.py`: checks fixed-belief initialization, missing-road
-  priors, traffic multipliers, combined delays, and traffic-driven route changes.
-- `tests/test_allocation.py`: checks operational constraints, joint allocation,
-  priorities, response time, future-incident exclusion, and input preservation.
-
-CSV field values remain strings at this stage. Numeric conversion will happen
-explicitly in the components that use them. JSON numbers retain their supplied
-numeric types. Both road directions remain separate; observations and reports
-are not merged across directions.
-
-## Bayesian reasoning
-
-For known local weather, start with the supplied road-status distribution for
-that weather. For unknown weather, average those distributions using
-`weather_prior`. Reports from other roads do not supply a road's missing weather.
-
-Multiply each status's prior probability by the likelihood of every report under
-that true status. Reports are assumed conditionally independent given the true
-status. The report tables are indexed as `[true_status][reported_status]`.
-Divide the three resulting weights by their sum to obtain the posterior.
-Choose the most likely status, with restrictive tie handling as described above.
-
-All road reports are available at time zero. Conflicting weather within one
-directed road's reports and impossible evidence are reported as input errors.
-
-The independence assumption can overstate confidence if reports copy one another.
-MAP routing also discards the remaining uncertainty when selecting a road cost.
-Without ground-truth road states, these results cannot measure estimation accuracy.
-
-## Routing
-
-The student selected uniform-cost search. Each usable directed road receives a
-cost equal to its estimated travel time in seconds, combining road-status and
-traffic effects. Roads inferred as Blocked are
-excluded. The search uses a priority queue to expand the location with the lowest
-accumulated travel time, keeping a better route whenever one is found. It finishes
-when the goal is removed from that queue at minimum cost. Parent links reconstruct
-the selected path. No heuristic is needed.
-
-The routing function returns a path and travel time. Staying at the same location
-returns a one-node path and zero seconds. An unreachable destination returns an
-empty path and infinite time. Unknown endpoints are rejected.
-
-Equal-cost routes retain the first route discovered; priority-queue ties use
-location identifiers. This is deterministic and does not change the minimum cost.
-The optional route query uses endpoints supplied by the user; it does not select a
-responder or look ahead at future incidents.
-
-## Historical traffic filtering
-
-The student selected forward filtering. Traffic levels are Low, Medium, and High;
-they are distinct from the Open, Congested, and Blocked road statuses.
-
-For each observed directed road, sort its observations by numeric `observation_nr`.
-Use the supplied `initial` distribution as the prior for the first hidden state.
-Multiply by the first observation's emission probabilities and normalize. Before
-each following observation, predict the next distribution using the transition
-matrix, then multiply by that observation's emission probabilities and normalize.
-Transition rows are previous states and columns are next states. Emission rows
-are hidden states and columns are observations.
-
-The result is a distribution after the last historical observation. No new
-transition or emission probabilities are trained from the CSV. The ordinal
-observation numbers are not interpreted as seconds or simulation timestamps.
-The filter uses each scenario's own probability file; Scenario 2's model differs.
-
-Only roads with observations receive a historical belief. The pure filtering
-function returns the supplied prior for an empty sequence, while the historical
-inference function leaves unobserved roads absent. The separate planning
-initializer then covers every road: it copies the last historical belief when
-available and otherwise copies that scenario's `initial` distribution. No extra
-HMM prediction is made between the end of history and simulation time zero.
-
-The selected model keeps these initialized beliefs fixed for the simulation.
-It does not assign a duration in seconds to historical HMM steps or advance
-traffic beliefs as simulation time passes. The routing graph is built once from
-these fixed beliefs. The full simulation clock is still pending.
-
-Examples below are beliefs after each road's last historical observation,
-rounded to six decimal places. Internal computations retain full precision.
-
-| Scenario | Directed road | Low | Medium | High |
-| --- | --- | --- | --- | --- |
-| 1 | H1 to N1 | 0.871452 | 0.123028 | 0.005520 |
-| 2 | H2 to N8 | 0.010113 | 0.282220 | 0.707666 |
-| 3 | N16 to N17 | 0.001865 | 0.074845 | 0.923290 |
-
-## Traffic cost policy
-
-The student approved these multipliers:
-
-| Hidden traffic level | Travel multiplier |
+| Location | Contents |
 | --- | --- |
-| Low | 1.0 |
-| Medium | 1.25 |
-| High | 1.5 |
+| `run.py` | The required entry point |
+| `ers/` | All Python implementation modules |
+| `data/scenarios/Scenario1/`, `Scenario2/`, `Scenario3/` | The supplied scenario files, unchanged |
+| `tests/` | Unit, integration, validation, and command-line checks |
+| `docs/development_notes.md` | Exact development prompt, approved decisions, interactions, and findings |
+| `outputs/scenario1/`, `scenario2/`, `scenario3/` | Generated plans and statistics; examples for all three are included |
 
-For each road, average the multipliers using its full traffic belief:
+## How the components work
+
+| Module in `ers/` | Responsibility |
+| --- | --- |
+| `cli.py` | Load the selected scenario, connect the components, validate, and save |
+| `scenario_loader.py` | Read the seven input files |
+| `bayesian.py` | Infer road-status probabilities from local weather and reports |
+| `hmm.py` | Filter each directed road's traffic history and initialize fixed planning beliefs |
+| `travel_times.py` | Combine road-status and expected traffic delays |
+| `routing.py` | Build the directed weighted graph and run uniform-cost search |
+| `allocation.py` | Build feasible domains and optimize one dispatch batch with CSP backtracking |
+| `simulation.py` | Process incident and responder-release events over time |
+| `validation.py` | Replay the exported plan independently and check operational feasibility |
+| `reporting.py` | Export the required JSON schema and calculate the approved statistics |
+
+### Bayesian road inference
+
+Known weather is local to a reported directed road. Its prior is the provided
+road-status distribution for that weather. With unknown weather, marginalize
+using the supplied weather prior. Multiply each status's prior by the likelihood
+of every report and normalize. Report errors are assumed conditionally independent
+given the true road status; CPT rows are true statuses and columns reported statuses.
+
+Choose the most likely status (MAP). Exact ties prefer Blocked, then Congested,
+then Open. Open uses distance/speed; Congested multiplies that time by 1.5;
+Blocked roads are excluded. Opposite directions remain separate.
+
+### HMM traffic and travel costs
+
+Traffic levels Low/Medium/High differ from road statuses. The observation CSV
+contains historical sequences available before simulation time zero.
+`observation_nr` orders each directed road's sequence; it is not seconds.
+
+Use the scenario's own initial distribution for the first hidden state, update
+with the first observation, then predict and update for each later observation.
+Transition rows represent previous states and columns next states. Emission rows
+represent hidden states and columns observations. Normalize after every update.
+The matrices are supplied inputs; they are not learned from observation frequencies.
+
+Treat each final historical posterior as the estimate at simulation time zero.
+For a road with no history, use that scenario's `initial` distribution. The
+selected model keeps these beliefs fixed throughout the simulation.
 
 ```text
 traffic multiplier = P(Low) * 1.0 + P(Medium) * 1.25 + P(High) * 1.5
 estimated travel time = road-status travel time * traffic multiplier
 ```
 
-The road-status time is distance/speed for Open, multiplied by 1.5 for Congested.
-Blocked roads remain excluded regardless of traffic. With probabilities 0.6,
-0.3, and 0.1, the traffic multiplier is 1.125. A Congested road with certain High
-traffic takes 2.25 times normal travel time under this selected model.
+For probabilities 0.6, 0.3, 0.1, the expected traffic multiplier is 1.125.
+Congested plus certain High traffic gives 2.25 times normal time. Blocked roads
+remain unusable regardless of traffic. Units are metres, metres/second, and seconds.
+Fractional times retain their full precision; display rounding uses three decimals.
 
-All 14 roads in Scenario 1 have observations. Scenario 2 uses the initial prior
-for 27 roads; Scenario 3 uses it for 50 roads. Scenario 2's fallback multiplier
-is 1.1625, using its own initial distribution rather than another scenario's model.
+### Search and constraint-based allocation
 
-The numerical traffic factors are chosen assumptions rather than calibrated
-measurements. Fixed beliefs ignore later traffic changes. Multiplying road and
-traffic delays can count congestion twice if both estimates describe the same
-underlying delay; this is a limitation of the selected initial model.
+Uniform-cost search expands the smallest accumulated travel-time entry and stops
+when the goal is removed at minimum cost. Parent links reconstruct the route.
+An unreachable destination returns an empty path and infinite time; staying at
+the same location takes zero time. Equal-cost routes retain a deterministic first choice.
 
-## Constraint-based allocation
+CSP variables are known, pending incidents. Domains are feasible available
+responders plus an unassigned option. Constraints enforce listed capabilities,
+availability, reachable routes, arrival deadlines, and one incident per responder
+in a dispatch batch. The search uses plain backtracking without forward checking.
 
-The student selected plain CSP backtracking with a priority-first objective.
-
-- Variables: incidents that are already known and still pending.
-- Domains: currently feasible responder assignments, plus leaving an incident
-  unassigned for now.
-- Constraints: the listed capability must match, the responder must be available,
-  the route must exist, arrival must be at or before the absolute deadline, and
-  no responder may receive two assignments in one dispatch batch.
-
-The search tries each compatible choice and undoes it before trying another.
-Domains are built once using the unary constraints. A set of used responder IDs
-checks the shared-responder constraint during search. There is no forward checking
-or lookahead at unrevealed incidents.
-
-Complete combinations are compared by the tuple:
+Complete combinations are compared left-to-right using:
 
 ```text
 (Critical count, High count, Medium count, Low count, -total response time)
 ```
 
-The comparison proceeds left to right. Response time is arrival time minus the
-incident's timestamp, including any waiting before dispatch. Equal scores retain
-the first combination in input order. The result is optimal for the current
-immediate batch under these criteria, not for a sequence of future dispatches.
+Response time is arrival minus incident timestamp, including waiting before
+assignment. Equal scores retain input-order choices. This optimizes the current
+batch; it does not optimize a whole sequence of future jobs.
 
-The allocator leaves input state unchanged. Assignment records include start,
-arrival, completion, and response times. Completion is arrival plus the required
-handling duration; it can be later than the arrival deadline. The eventual
-simulator will apply the chosen assignments, track occupancy, and pass only
-unhandled pending incidents to subsequent allocation calls.
+### Simulation rules
 
-Initially Busy responders become eligible at their supplied availability time.
-Their position after that existing activity, movement after new assignments,
-preemption, and scheduling events are still simulation decisions. The current
-entry point previews only the first batch at time zero:
+The clock jumps to incident timestamps and responder releases. All simultaneous
+arrivals and releases are processed before a joint allocation. Waiting incidents
+are reconsidered at each event. Future incidents are not passed to the allocator
+before their timestamps.
 
-| Scenario | Initial assignments |
-| --- | --- |
-| 1 | R1 to I2; R2 to I4; R3 to I3 |
-| 2 | R10 to I3 |
-| 3 | R3 to I1; R9 to I2 |
+A responder stays busy for travel plus the incident's handling duration. Jobs are
+not interrupted. After completion, the responder stays at the incident location.
+Initially Busy units become available at their supplied locations after the
+provided remaining time. No return-to-base or patient-transport trip is modeled.
 
-These are dispatch previews rather than completed-scenario statistics. Pending
-incidents can be reconsidered later once the simulation policy is implemented.
+Zero-duration jobs can complete and release a responder at the same time, allowing
+another immediate assignment. The simulation stops when no future events remain,
+including all dispatched-job completions. Remaining incidents are unhandled.
+Arrival deadlines are hard constraints; handling may finish after the deadline.
 
-## Verification
+## Output files and statistics
 
-Run the thirty-eight project checks from this project directory:
+`plan.json` is a JSON list with exactly these fields per assignment:
+
+```json
+[
+  {
+    "responder_id": "R1",
+    "incident_id": "I2",
+    "path": ["N1", "H1", "N2"],
+    "time": 0.0
+  }
+]
+```
+
+The example shows one entry; the generated files contain the full scenario plans.
+`time` is assignment start time, not arrival or completion.
+
+`statistics.txt` reports:
+
+- Incidents handled: assigned incidents, all completed before the simulation stops.
+- Incidents unhandled: total incidents minus handled incidents, with their IDs.
+- Responders used: distinct responders assigned to the supplied incidents.
+- Average response time: appearance-to-arrival time over handled incidents only.
+- Deadlines met: on-time handled incidents divided by **all** incidents; unhandled
+  incidents count as deadline misses.
+
+Times are seconds. With no handled incidents, the average is N/A. With no incidents,
+the deadline percentage is N/A. Statistics use timings recomputed by plan replay.
+
+## Validation and tests
+
+Plans are validated before output files are written. Validation checks the four-field
+schema, finite non-negative start times, identifiers, incident visibility, capability,
+initial availability, duplicate incidents, path endpoints and directed edges,
+arrival deadlines, and responder overlap through travel and handling. It also
+replays positions after service and recomputes arrival and completion times.
+
+Run the complete suite from the project root:
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-They cover a hand-calculated multi-report posterior, conditioning on local
-weather, missing-weather marginalization, separate road directions, restrictive
-ties, and impossible evidence. Routing checks cover weighted alternatives,
-improved frontier entries, road congestion and blockage, same-location trips,
-unreachable destinations, and unknown endpoints.
+All **61 tests passed**. Evidence includes:
 
-All thirty-eight checks passed. Traffic-adjusted route costs were compared against an independent
-Floyd-Warshall reference for all 845 source/destination pairs across the three
-scenarios. Returned paths were checked for contiguous directed roads, exclusion
-of Blocked roads, and agreement between summed road costs and reported travel time.
-All three scenario commands also ran successfully. Their routing graphs contain
-10, 28, and 58 usable directed roads, respectively.
+- Hand-calculated Bayesian and HMM posteriors, plus exhaustive hidden-history enumeration.
+- UCS costs compared with an independent Floyd-Warshall reference for all 845
+  source/destination pairs in the three scenarios.
+- A scarce-capability case requiring backtracking, priority ordering, and future-incident exclusion.
+- Simultaneous events, initial busy units, no preemption, reuse after handling,
+  unchanged input state, and zero-duration job chains.
+- Deliberately invalid plans rejected for overlap, lateness, visibility, capability,
+  malformed fields, invalid locations, and missing or blocked roads.
+- All three documented commands executed in a clean project copy, with output
+  files read back and validated; execution from another working directory also checked.
 
-The seven HMM checks cover the first observation, a two-observation hand
-calculation, comparison with exhaustive hidden-history enumeration, sequence
-ordering and direction, each scenario's own model, empty history, and impossible
-evidence. Filtering produced normalized historical beliefs for 14, 3, and 10
-directed roads in the three scenarios, without changing input tables or rows.
+All 22 supplied scenario files, including their README, were verified unchanged
+after relocation.
 
-Six traffic-cost checks verify use of the full probability distribution, combined
-road/traffic delays, Blocked-road exclusion, direct copying of historical beliefs
-without another prediction, scenario-specific fallback priors, and a case where
-traffic changes the fastest route. All three scenario commands also run with the
-integrated traffic model. Scenario 1 route queries return 79.399 seconds for
-N1 to N2, 78.973 seconds for N2 to N1, and zero for N1 to N1.
+## Results for the supplied scenarios
 
-Eleven allocation checks cover a scarce-capability case requiring backtracking,
-the priority hierarchy, response-time ties, exclusion of future incidents, exact
-availability and arrival deadlines, handling after arrival, unreachable routes,
-capability mismatches, responder uniqueness, deterministic state-preserving search,
-and initialization from the supplied CSV fields. Initial allocations on all three
-scenarios also passed independent route, time, capability, and availability checks.
+| Scenario | Handled | Unhandled | Responders used | Average response (s) | Deadlines met |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 6 / 7 | 1 | 4 | 90.256 | 85.714% |
+| 2 | 3 / 12 | 9 | 2 | 15.419 | 25.000% |
+| 3 | 12 / 20 | 8 | 7 | 654.405 | 60.000% |
 
-| Scenario | Estimated Open | Estimated Congested | Estimated Blocked |
-| --- | --- | --- | --- |
-| 1 | 8 | 2 | 4 |
-| 2 | 19 | 9 | 2 |
-| 3 | 47 | 11 | 2 |
+All three plans passed replay validation. Read the averages together with coverage:
+Scenario 2's low average describes only 3 of its 12 incidents. Its blocked bridge
+roads disconnect parts of the city under the MAP estimates, and the chosen traffic
+factors make several tight deadlines infeasible. For example, H1 to N1 takes
+61.806 seconds under this model, exceeding I1's deadline of 55 from time zero.
 
-These counts concern inferred directed-road statuses. Incident performance
-statistics will follow after simulation is implemented.
+## Limitations and development record
 
-## Requirements already specified by the sources
+Validity is conditional on the selected estimates. No true road-state timeline was
+provided, so validation cannot establish real-world road accessibility or estimation
+accuracy. MAP status selection discards remaining uncertainty, correlated reports
+can overstate confidence, and fixed traffic ignores later changes. The traffic
+multipliers are chosen assumptions; multiplying traffic and road delays can count
+the same congestion twice.
 
-- Distances and coordinates are metres; road speeds are metres/second. All
-  simulation times and durations are seconds, including fractional seconds.
-- Incidents become known at their timestamps. Deadlines are absolute times for
-  **arrival**, not completion. Handling starts after arrival and occupies the
-  responder for `time_required` seconds.
-- Use each responder's listed capabilities and availability.
-- Road statuses are Open (normal travel time), Congested (1.5 times normal),
-  and Blocked (unusable).
-- Road reports are available at time 0. Reported weather is local to that road.
-- Traffic observations are historical and available before time 0.
-  `observation_nr` orders a separate sequence for each directed road; it is not
-  a simulation timestamp.
-- Traffic levels Low/Medium/High are distinct from road statuses. The scenario
-  README explicitly leaves their influence on planning to the student.
-- Each scenario's own probability tables must be read. Scenario 2's traffic
-  model differs from the models in scenarios 1 and 3.
-- The complete system must use course methods for search, Bayesian reasoning,
-  constraint-based allocation, and Hidden Markov Models.
-- The final `plan.json` must be a JSON list of objects with `responder_id`,
-  `incident_id`, `path`, and assignment start `time`.
-- The final `statistics.txt` must include incidents handled, responders used,
-  average response time, and percentage of deadlines met. Definitions and the
-  treatment of unhandled incidents must be documented.
+The CSP optimizes immediate batches, not global simulation outcomes, and does not
+strategically wait for a busy responder or reserve units for unrevealed incidents.
+Plain exhaustive backtracking can become expensive on larger instances. Validation
+checks feasibility rather than global optimality; plan replay alone cannot prove
+that an arbitrary planner avoided hidden lookahead. Dedicated visibility tests and
+the simulator's data flow provide separate evidence for this implementation.
 
-## Design decisions still open
-
-The following are not implemented or silently chosen:
-
-1. Simulation clock, responder location after service, replanning/preemption,
-   and stopping rules.
-2. Statistics definitions and the scope of complete-plan validation.
-
-We will discuss alternatives and record the student's choice before implementing
-each behavior.
+The development record in `docs/development_notes.md` retains the exact initial
+coding prompt, subsequent choices, testing evidence, and limitations for the report
+and oral defence. The submitted report and repository administration are separate
+assignment deliverables.

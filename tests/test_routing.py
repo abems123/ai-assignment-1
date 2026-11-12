@@ -4,13 +4,13 @@ from math import inf, isinf
 from pathlib import Path
 import unittest
 
-from bayesian import infer_road_beliefs, most_likely_road_status
-from hmm import infer_historical_traffic, initialize_traffic_beliefs
-from routing import build_routing_graph, uniform_cost_search
-from scenario_loader import load_scenario
+from ers.bayesian import infer_road_beliefs, most_likely_road_status
+from ers.hmm import infer_historical_traffic, initialize_traffic_beliefs
+from ers.routing import build_routing_graph, uniform_cost_search
+from ers.scenario_loader import load_scenario
 
 
-SCENARIOS = Path(__file__).resolve().parents[1] / "Scenarios"
+SCENARIOS = Path(__file__).resolve().parents[1] / "data" / "scenarios"
 
 
 def reference_distances(graph):

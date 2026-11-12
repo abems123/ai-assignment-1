@@ -5,11 +5,11 @@ from itertools import product
 from pathlib import Path
 import unittest
 
-from hmm import TRAFFIC_LEVELS, forward_filter, infer_historical_traffic
-from scenario_loader import load_scenario
+from ers.hmm import TRAFFIC_LEVELS, forward_filter, infer_historical_traffic
+from ers.scenario_loader import load_scenario
 
 
-SCENARIOS = Path(__file__).resolve().parents[1] / "Scenarios"
+SCENARIOS = Path(__file__).resolve().parents[1] / "data" / "scenarios"
 
 
 def enumerate_hidden_histories(observations, tables):

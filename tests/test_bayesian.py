@@ -4,16 +4,16 @@ from copy import deepcopy
 from pathlib import Path
 import unittest
 
-from bayesian import (
+from ers.bayesian import (
     infer_road_beliefs,
     infer_road_probabilities,
     most_likely_road_status,
     road_status_prior,
 )
-from scenario_loader import load_scenario
+from ers.scenario_loader import load_scenario
 
 
-SCENARIOS = Path(__file__).resolve().parents[1] / "Scenarios"
+SCENARIOS = Path(__file__).resolve().parents[1] / "data" / "scenarios"
 
 
 class BayesianTests(unittest.TestCase):

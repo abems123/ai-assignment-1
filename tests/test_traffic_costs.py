@@ -4,13 +4,13 @@ from math import inf
 from pathlib import Path
 import unittest
 
-from hmm import initialize_traffic_beliefs
-from routing import build_routing_graph, uniform_cost_search
-from scenario_loader import load_scenario
-from travel_times import expected_traffic_multiplier, estimated_travel_time_seconds
+from ers.hmm import initialize_traffic_beliefs
+from ers.routing import build_routing_graph, uniform_cost_search
+from ers.scenario_loader import load_scenario
+from ers.travel_times import expected_traffic_multiplier, estimated_travel_time_seconds
 
 
-SCENARIOS = Path(__file__).resolve().parents[1] / "Scenarios"
+SCENARIOS = Path(__file__).resolve().parents[1] / "data" / "scenarios"
 
 
 class TrafficCostTests(unittest.TestCase):
