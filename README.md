@@ -1,14 +1,21 @@
 # Emergency Response System
 
-A working initial implementation of the emergency-response assignment using
-Bayesian road inference, HMM forward filtering, uniform-cost routing, and a
-priority-first backtracking CSP. It runs an event-driven simulation, validates
-the exported plan, and writes the required plan and statistics files.
+An AI-based decision-support system for dispatching emergency responders after a severe storm. The city is represented as a **directed road graph**. The system estimates uncertain road conditions and traffic, finds routes, assigns suitable responders to incidents, and simulates their work over time.
 
-## Run
+This project implements the four AI components required by **Artificial Intelligence Practicum — Assignment 1**: search, Bayesian reasoning, constraint-based allocation, and Hidden Markov Models (HMMs).
 
-Use Python 3.9 or newer. Everything uses the Python standard library; no packages
-need to be installed. Extract the project, open its root folder, and run:
+## Requirements and libraries
+
+- **Python 3.9 or later** (Python 3 is required).
+- **No third-party packages are required.** The program uses only Python's standard library.
+- Standard-library modules used include `argparse`, `csv`, `json`, `pathlib`, `dataclasses`, `collections`, `heapq`, `math`, `copy`, and `typing`.
+- Tests use the standard-library `unittest` module, together with utilities such as `subprocess` and `tempfile`.
+
+There is **no `pip install` step** and no `requirements.txt` is necessary for this version.
+
+## How to run
+
+Extract or clone the repository and open a terminal in the project root (the folder containing `run.py`). Then run one of the three supplied scenarios:
 
 ```bash
 python3 run.py 1
@@ -16,127 +23,121 @@ python3 run.py 2
 python3 run.py 3
 ```
 
-Each command creates or updates `plan.json` and `statistics.txt` in its own
-`outputs/scenario1/`, `outputs/scenario2/`, or `outputs/scenario3/` folder.
-Outputs are organized by scenario so running another scenario does not erase the
-previous result. Input and output paths are relative to the project, independent
-of the terminal's working directory.
+On Windows, use `python run.py 1` if `python3` is not available.
 
-For a diagnostic route query instead of a full simulation:
+Each run executes the full simulation, validates its generated plan, prints the statistics, and saves:
+
+```text
+outputs/scenario1/plan.json
+outputs/scenario1/statistics.txt
+outputs/scenario2/plan.json
+outputs/scenario2/statistics.txt
+outputs/scenario3/plan.json
+outputs/scenario3/statistics.txt
+```
+
+Only the selected scenario's output files are regenerated. Paths are resolved relative to the project root, so the command can also be launched from another working directory by using the path to `run.py`.
+
+To inspect a single route without running the full simulation:
 
 ```bash
 python3 run.py 1 --route N1 N2
 ```
 
-This prints `N1 -> H1 -> N2`, with an estimated travel time of 79.399 seconds.
-Route-query mode does not generate the simulation output files.
+This displays the selected route and estimated travel time in **seconds**. Route-inspection mode does not regenerate `plan.json` or `statistics.txt`.
 
-## Folder organization
-
-| Location | Contents |
-| --- | --- |
-| `run.py` | The required entry point |
-| `ers/` | All Python implementation modules |
-| `data/scenarios/Scenario1/`, `Scenario2/`, `Scenario3/` | The supplied scenario files, unchanged |
-| `tests/` | Unit, integration, validation, and command-line checks |
-| `docs/development_notes.md` | Exact development prompt, approved decisions, interactions, and findings |
-| `outputs/scenario1/`, `scenario2/`, `scenario3/` | Generated plans and statistics; examples for all three are included |
-
-## How the components work
-
-| Module in `ers/` | Responsibility |
-| --- | --- |
-| `cli.py` | Load the selected scenario, connect the components, validate, and save |
-| `scenario_loader.py` | Read the seven input files |
-| `bayesian.py` | Infer road-status probabilities from local weather and reports |
-| `hmm.py` | Filter each directed road's traffic history and initialize fixed planning beliefs |
-| `travel_times.py` | Combine road-status and expected traffic delays |
-| `routing.py` | Build the directed weighted graph and run uniform-cost search |
-| `allocation.py` | Build feasible domains and optimize one dispatch batch with CSP backtracking |
-| `simulation.py` | Process incident and responder-release events over time |
-| `validation.py` | Replay the exported plan independently and check operational feasibility |
-| `reporting.py` | Export the required JSON schema and calculate the approved statistics |
-
-### Bayesian road inference
-
-Known weather is local to a reported directed road. Its prior is the provided
-road-status distribution for that weather. With unknown weather, marginalize
-using the supplied weather prior. Multiply each status's prior by the likelihood
-of every report and normalize. Report errors are assumed conditionally independent
-given the true road status; CPT rows are true statuses and columns reported statuses.
-
-Choose the most likely status (MAP). Exact ties prefer Blocked, then Congested,
-then Open. Open uses distance/speed; Congested multiplies that time by 1.5;
-Blocked roads are excluded. Opposite directions remain separate.
-
-### HMM traffic and travel costs
-
-Traffic levels Low/Medium/High differ from road statuses. The observation CSV
-contains historical sequences available before simulation time zero.
-`observation_nr` orders each directed road's sequence; it is not seconds.
-
-Use the scenario's own initial distribution for the first hidden state, update
-with the first observation, then predict and update for each later observation.
-Transition rows represent previous states and columns next states. Emission rows
-represent hidden states and columns observations. Normalize after every update.
-The matrices are supplied inputs; they are not learned from observation frequencies.
-
-Treat each final historical posterior as the estimate at simulation time zero.
-For a road with no history, use that scenario's `initial` distribution. The
-selected model keeps these beliefs fixed throughout the simulation.
+## Project structure
 
 ```text
-traffic multiplier = P(Low) * 1.0 + P(Medium) * 1.25 + P(High) * 1.5
-estimated travel time = road-status travel time * traffic multiplier
+ai-assignment-1/
+├── run.py                        # Command-line entry point
+├── README.md                     # Installation and execution instructions
+├── ers/
+│   ├── cli.py                    # Coordinates the full workflow
+│   ├── scenario_loader.py        # Loads scenario CSV/JSON files
+│   ├── bayesian.py               # Bayesian road-status inference
+│   ├── hmm.py                    # HMM forward filtering for traffic
+│   ├── travel_times.py           # Road and traffic travel-time estimates
+│   ├── routing.py                # Uniform-cost search
+│   ├── allocation.py             # Constraint-based responder allocation
+│   ├── simulation.py             # Event-driven simulation
+│   ├── validation.py             # Independent plan replay and validation
+│   └── reporting.py              # JSON plan and text statistics
+├── data/scenarios/
+│   ├── Scenario1/
+│   ├── Scenario2/
+│   └── Scenario3/
+├── outputs/                       # Generated plans and statistics by scenario
+├── tests/                         # Automated tests
+└── docs/
+    ├── Assignment1.pdf
+    └── development_notes.md      # LLM collaboration and design history
 ```
 
-For probabilities 0.6, 0.3, 0.1, the expected traffic multiplier is 1.125.
-Congested plus certain High traffic gives 2.25 times normal time. Blocked roads
-remain unusable regardless of traffic. Units are metres, metres/second, and seconds.
-Fractional times retain their full precision; display rounding uses three decimals.
+Each `ScenarioX` directory contains the seven input files: `city_graph.json`, `responders.csv`, `incidents.csv`, `road_reports.csv`, `road_probabilities.json`, `observed_traffic.csv`, and `traffic_probabilities.json`.
 
-### Search and constraint-based allocation
+## How the system works
 
-Uniform-cost search expands the smallest accumulated travel-time entry and stops
-when the goal is removed at minimum cost. Parent links reconstruct the route.
-An unreachable destination returns an empty path and infinite time; staying at
-the same location takes zero time. Equal-cost routes retain a deterministic first choice.
+1. **Bayesian reasoning (`ers/bayesian.py`):** Estimates each directed road's probabilities of being `Open`, `Congested`, or `Blocked` from weather and noisy citizen, police, and sensor reports. Unknown weather is marginalized using the weather prior. Report errors are assumed conditionally independent given road status. The most probable status (MAP) is used for planning; exact ties prefer `Blocked`, then `Congested`, then `Open`.
+2. **HMM (`ers/hmm.py`):** Performs forward filtering on each directed road's historical traffic observations. The supplied initial distribution is updated with the first observation; subsequent observations are preceded by a transition prediction. Observations are ordered by `observation_nr`, which is **not** a simulation timestamp. Roads without observations use the scenario's supplied initial traffic distribution.
+3. **Travel-time estimation (`ers/travel_times.py`):** Converts road and traffic beliefs into fixed estimated road costs, as detailed below.
+4. **Search (`ers/routing.py`):** Uses Uniform-Cost Search (Dijkstra-style search with a priority queue) to find the minimum-cost route on the directed graph. Roads estimated as `Blocked` are excluded.
+5. **Constraint-based allocation (`ers/allocation.py`):** Uses plain backtracking to assign currently available responders to known incidents. It checks required capabilities, responder availability, reachable routes, and absolute arrival deadlines. A responder can receive only one assignment in a dispatch batch, and incidents may remain unassigned. Among feasible combinations it maximizes the numbers handled in this order: **Critical, High, Medium, Low**; ties are broken by minimizing total response time.
+6. **Simulation (`ers/simulation.py`):** Advances directly to incident appearances and responder-release events. New incidents are not considered before their timestamps. Pending incidents are reconsidered when events occur. Assigned responders cannot be interrupted and remain busy for travel plus incident-handling time. After completion they become available at the incident location; initially busy responders become free at their supplied locations. There is no automatic ambulance trip to a hospital or return-to-base journey.
+7. **Validation and output (`ers/validation.py`, `ers/reporting.py`):** Replays the plan, checks constraints independently, recalculates timings, and writes the required output files.
 
-CSP variables are known, pending incidents. Domains are feasible available
-responders plus an unassigned option. Constraints enforce listed capabilities,
-availability, reachable routes, arrival deadlines, and one incident per responder
-in a dispatch batch. The search uses plain backtracking without forward checking.
+### Travel-time rules and assumptions
 
-Complete combinations are compared left-to-right using:
+All distances are in **metres**, speeds in **metres/second**, and times in **seconds**. The assignment specifies these road-status rules:
+
+| Inferred road status | Road-status travel time |
+| --- | --- |
+| Open | `distance / speed` |
+| Congested | `1.5 * distance / speed` |
+| Blocked | Unusable (infinite cost) |
+
+The project additionally uses **chosen**, not assignment-prescribed, HMM traffic multipliers:
+
+| Traffic level | Multiplier |
+| --- | ---: |
+| Low | 1.00 |
+| Medium | 1.25 |
+| High | 1.50 |
+
+The expected HMM multiplier uses the **full traffic probability distribution**:
 
 ```text
-(Critical count, High count, Medium count, Low count, -total response time)
+expected_multiplier = P(Low)*1.00 + P(Medium)*1.25 + P(High)*1.50
 ```
 
-Response time is arrival minus incident timestamp, including waiting before
-assignment. Equal scores retain input-order choices. This optimizes the current
-batch; it does not optimize a whole sequence of future jobs.
+**The current implementation takes the larger of the two estimated delays; it does not multiply the road-status and HMM multipliers together:**
 
-### Simulation rules
+```text
+base_time       = distance / speed
+status_time     = base_time * (1.0 if Open else 1.5 if Congested)
+traffic_time    = base_time * expected_multiplier
+estimated_time  = max(status_time, traffic_time)
+```
 
-The clock jumps to incident timestamps and responder releases. All simultaneous
-arrivals and releases are processed before a joint allocation. Waiting incidents
-are reconsidered at each event. Future incidents are not passed to the allocator
-before their timestamps.
+`Blocked` remains unusable regardless of HMM traffic. This `max` policy is a **modeling choice** intended to avoid stacking potentially overlapping congestion penalties. It is not explicitly required by the assignment. Both road-status and HMM traffic estimates stay **fixed during simulation**; the program does not sample actual hidden road states or predict new traffic steps as simulation seconds pass.
 
-A responder stays busy for travel plus the incident's handling duration. Jobs are
-not interrupted. After completion, the responder stays at the incident location.
-Initially Busy units become available at their supplied locations after the
-provided remaining time. No return-to-base or patient-transport trip is modeled.
+### Deadline and scheduling semantics
 
-Zero-duration jobs can complete and release a responder at the same time, allowing
-another immediate assignment. The simulation stops when no future events remain,
-including all dispatched-job completions. Remaining incidents are unhandled.
-Arrival deadlines are hard constraints; handling may finish after the deadline.
+An incident's timestamp is when it becomes known. Its deadline is an **absolute latest arrival time**, not a time allowance after appearance. The handling duration starts upon arrival; completion is allowed after the arrival deadline.
 
-## Output files and statistics
+```text
+arrival_time     = assignment_start_time + route_travel_time
+completion_time  = arrival_time + incident_handling_duration
+response_time    = arrival_time - incident_timestamp
+```
 
-`plan.json` is a JSON list with exactly these fields per assignment:
+An assignment is feasible only if `arrival_time <= incident_deadline` and all other operational constraints hold. The CSP optimizes each immediate dispatch batch, not the entire future incident stream.
+
+## Output formats
+
+### `plan.json`
+
+A JSON array with **exactly** the four fields required by the assignment for each assignment:
 
 ```json
 [
@@ -149,82 +150,56 @@ Arrival deadlines are hard constraints; handling may finish after the deadline.
 ]
 ```
 
-The example shows one entry; the generated files contain the full scenario plans.
-`time` is assignment start time, not arrival or completion.
+`time` is the simulation time at which the responder **starts the assignment**, not the arrival time. Each path lists the directed road-graph locations visited.
 
-`statistics.txt` reports:
+### `statistics.txt`
 
-- Incidents handled: assigned incidents, all completed before the simulation stops.
-- Incidents unhandled: total incidents minus handled incidents, with their IDs.
-- Responders used: distinct responders assigned to the supplied incidents.
-- Average response time: appearance-to-arrival time over handled incidents only.
-- Deadlines met: on-time handled incidents divided by **all** incidents; unhandled
-  incidents count as deadline misses.
+The statistics file includes:
 
-Times are seconds. With no handled incidents, the average is N/A. With no incidents,
-the deadline percentage is N/A. Statistics use timings recomputed by plan replay.
+- **Incidents handled:** Number of incidents with a completed assignment.
+- **Responders used:** Number of distinct responders dispatched at least once.
+- **Average response time:** Mean `(arrival time - incident timestamp)` among **handled** incidents, in seconds; `N/A` when none are handled.
+- **Deadlines met:** `(on-time handled incidents / all incidents) * 100%`. **Unhandled incidents count as deadline misses**; `N/A` when the scenario has no incidents.
+- **Additional information:** Unhandled count and incident IDs.
 
-## Validation and tests
+The program calculates statistics from the **validated, replayed plan**, not from an unverified prediction.
 
-Plans are validated before output files are written. Validation checks the four-field
-schema, finite non-negative start times, identifiers, incident visibility, capability,
-initial availability, duplicate incidents, path endpoints and directed edges,
-arrival deadlines, and responder overlap through travel and handling. It also
-replays positions after service and recomputes arrival and completion times.
+## Testing and validation
 
-Run the complete suite from the project root:
+Run the tests from the project root:
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-All **61 tests passed**. Evidence includes:
+The test suite covers Bayesian inference, HMM filtering, traffic costs, routing, CSP allocation, event-driven simulation, plan validation, reporting, and command-line execution. The plan validator checks valid road directions and endpoints, responder capabilities and availability, incident visibility, arrival deadlines, repeated assignments, and overlapping responder work.
 
-- Hand-calculated Bayesian and HMM posteriors, plus exhaustive hidden-history enumeration.
-- UCS costs compared with an independent Floyd-Warshall reference for all 845
-  source/destination pairs in the three scenarios.
-- A scarce-capability case requiring backtracking, priority ordering, and future-incident exclusion.
-- Simultaneous events, initial busy units, no preemption, reuse after handling,
-  unchanged input state, and zero-duration job chains.
-- Deliberately invalid plans rejected for overlap, lateness, visibility, capability,
-  malformed fields, invalid locations, and missing or blocked roads.
-- All three documented commands executed in a clean project copy, with output
-  files read back and validated; execution from another working directory also checked.
+**Current test-suite issue (verified against this upload):** 61 tests run, **60 pass and 1 fails**. `tests/test_traffic_costs.py::test_road_congestion_and_high_traffic_multiply` still expects the **previous multiplicative** travel-time policy (`45.0 s`), while the current `max` policy correctly returns `30.0 s` for that test case. The test expectation needs to be updated to match the adopted policy; this README does not modify the test code. All three scenario runs complete and their generated plans pass validation.
 
-All 22 supplied scenario files, including their README, were verified unchanged
-after relocation.
+## Results on supplied scenarios
 
-## Results for the supplied scenarios
+Results reproduced by running the uploaded code with its current `max` travel-cost policy:
 
-| Scenario | Handled | Unhandled | Responders used | Average response (s) | Deadlines met |
-| --- | --- | --- | --- | --- | --- |
-| 1 | 6 / 7 | 1 | 4 | 90.256 | 85.714% |
-| 2 | 3 / 12 | 9 | 2 | 15.419 | 25.000% |
-| 3 | 12 / 20 | 8 | 7 | 654.405 | 60.000% |
+| Scenario | Handled | Unhandled | Responders used | Average response time | Deadlines met |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 6 / 7 | 1 | 4 | 89.765 s | 85.714% |
+| 2 | 9 / 12 | 3 | 7 | 36.982 s | 75.000% |
+| 3 | 12 / 20 | 8 | 7 | 628.279 s | 60.000% |
 
-All three plans passed replay validation. Read the averages together with coverage:
-Scenario 2's low average describes only 3 of its 12 incidents. Its blocked bridge
-roads disconnect parts of the city under the MAP estimates, and the chosen traffic
-factors make several tight deadlines infeasible. For example, H1 to N1 takes
-61.806 seconds under this model, exceeding I1's deadline of 55 from time zero.
+These percentages include unhandled incidents in the denominator. A low average response time alone does not imply that most incidents were handled.
 
-## Limitations and development record
+## Limitations and design choices
 
-Validity is conditional on the selected estimates. No true road-state timeline was
-provided, so validation cannot establish real-world road accessibility or estimation
-accuracy. MAP status selection discards remaining uncertainty, correlated reports
-can overstate confidence, and fixed traffic ignores later changes. The traffic
-multipliers are chosen assumptions; multiplying traffic and road delays can count
-the same congestion twice.
+- Road accessibility and travel costs are based on **inferred** conditions, not observed ground truth. MAP can discard substantial uncertainty about blocking.
+- Reports are treated as conditionally independent; correlated reports may overstate confidence.
+- Historical HMM beliefs and routing costs remain fixed for the entire simulation. Observation numbers do not specify elapsed simulation seconds.
+- The added traffic multipliers and `max` combination rule are assumptions. Different policies can produce very different deadline results.
+- Backtracking maximizes the quality of the **current** dispatch batch, not global performance across future incidents. It can also become expensive for larger instances.
+- Responder behavior omits patient transport, automatic return-to-base trips, and job interruption. Real-world emergencies may require these.
+- Validation checks feasibility **under the chosen estimated costs**. It does not establish true road conditions, global optimality, or real-world success.
 
-The CSP optimizes immediate batches, not global simulation outcomes, and does not
-strategically wait for a busy responder or reserve units for unrevealed incidents.
-Plain exhaustive backtracking can become expensive on larger instances. Validation
-checks feasibility rather than global optimality; plan replay alone cannot prove
-that an arbitrary planner avoided hidden lookahead. Dedicated visibility tests and
-the simulator's data flow provide separate evidence for this implementation.
+## Assignment submission
 
-The development record in `docs/development_notes.md` retains the exact initial
-coding prompt, subsequent choices, testing evidence, and limitations for the report
-and oral defence. The submitted report and repository administration are separate
-assignment deliverables.
+As required by `docs/Assignment1.pdf`, the GitHub repository should contain all source code, scenario data, this README, and the runnable `run.py` entry point. The **separate submission** is `report.pdf` (maximum three content pages, excluding the title page; one extra page for relevant LLM prompts is permitted). The report must prominently link to the GitHub repository and discuss the approach, AI concepts, LLM collaboration (including the exact first substantive prompt), testing, results, and critical reflection. Invite the two instructors specified in the assignment to the repository before submitting.
+
+The accompanying `docs/development_notes.md` contains development decisions and the LLM interaction record to support the report and oral defence; it does not replace the required PDF report.
